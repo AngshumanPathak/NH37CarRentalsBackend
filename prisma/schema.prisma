@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  FLEET_MANAGER
+  BOOKING_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum CarStatus {
+  AVAILABLE
+  BOOKED
+  ON_ROUTE
+  WITH_CUSTOMER
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum RentalType {
+  SELF_DRIVE
+  WITH_DRIVER
+  BOTH
+}
+
+enum BookingStatus {
+  PENDING
+  PAYMENT_PENDING
+  CONFIRMED
+  CAR_ASSIGNED
+  PICKUP_SCHEDULED
+  ON_THE_WAY
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  RAZORPAY
+  CASH
+}
+
+enum NotificationType {
+  BOOKING
+  PAYMENT
+  PICKUP
+  RETURN
+  SYSTEM
+}
+
+enum MaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum OtpType {
+  PHONE_VERIFICATION
+  LOGIN
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum DocumentType {
+  AADHAAR
+  DRIVING_LICENSE
+  VOTER_ID
+}
+
+enum DocumentVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// =========================
+// USER
+// =========================
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  phone        String     @unique
+  passwordHash String
+  role         UserRole   @default(CUSTOMER)
+  status       UserStatus @default(ACTIVE)
+
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  bookings            Booking[]
+  notifications       Notification[]
+  reviews             Review[]
+  adminLogs           AdminLog[]
+  passwordResetTokens PasswordResetToken[]
+
+  statusChanges BookingStatusHistory[] @relation("StatusChangedBy")
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([status])
+}
+
+// =========================
+// OTP
+// =========================
+
+model Otp {
+  id String @id @default(uuid())
+
+  phone String?
+  email String?
+
+  type     OtpType
+  codeHash String
+
+  expiresAt  DateTime
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([phone, type])
+  @@index([email, type])
+  @@index([expiresAt])
+}
+
+// =========================
+// CAR
+// =========================
+
+model Car {
+  id                 String @id @default(uuid())
+  name               String
+  brand              String
+  model              String
+  year               Int?
+  registrationNumber String @unique
+
+  description String?
+
+  status CarStatus @default(AVAILABLE)
+
+  // =========================
+  // RENTAL TYPE
+  // =========================
+
+  rentalType RentalType @default(SELF_DRIVE)
+
+  // =========================
+  // SELF DRIVE PRICING
+  // =========================
+
+  pricePerDaySelfDrive     Decimal? @db.Decimal(10, 2)
+  pricePerHourSelfDrive    Decimal? @db.Decimal(10, 2)
+  securityDepositSelfDrive Decimal? @db.Decimal(10, 2)
+
+  // =========================
+  // WITH DRIVER PRICING
+  // =========================
+
+  pricePerDayWithDriver     Decimal? @db.Decimal(10, 2)
+  pricePerHourWithDriver    Decimal? @db.Decimal(10, 2)
+  securityDepositWithDriver Decimal? @db.Decimal(10, 2)
+
+  // =========================
+  // VEHICLE INFORMATION
+  // =========================
+
+  seats        Int?
+  transmission String?
+  fuelType     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images      CarImage[]
+  locations   CarLocation[]
+  bookings    Booking[]
+  maintenance Maintenance[]
+  reviews     Review[]
+
+  @@index([status])
+  @@index([rentalType])
+}
+
+// =========================
+// REFRESH TOKEN
+// =========================
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// =========================
+// CAR IMAGE
+// =========================
+
+model CarImage {
+  id       String  @id @default(uuid())
+  url      String
+  publicId String?
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+}
+
+// =========================
+// CAR LOCATION
+// =========================
+
+model CarLocation {
+  id String @id @default(uuid())
+
+  latitude  Decimal @db.Decimal(10, 7)
+  longitude Decimal @db.Decimal(10, 7)
+
+  accuracy Decimal? @db.Decimal(10, 2)
+  speed    Decimal? @db.Decimal(10, 2)
+
+  recordedAt DateTime @default(now())
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  @@index([carId, recordedAt])
+}
+
+// =========================
+// BOOKING
+// =========================
+
+model Booking {
+  id String @id @default(uuid())
+
+  bookingNumber String @unique
+
+  pickupLocation String
+  dropLocation   String?
+
+  pickupLatitude  Decimal? @db.Decimal(10, 7)
+  pickupLongitude Decimal? @db.Decimal(10, 7)
+
+  dropLatitude  Decimal? @db.Decimal(10, 7)
+  dropLongitude Decimal? @db.Decimal(10, 7)
+
+  pickupAt DateTime
+  returnAt DateTime
+
+  // CUSTOMER SNAPSHOT
+  customerName  String
+  customerEmail String
+  customerPhone String
+
+  rentalType RentalType @default(SELF_DRIVE)
+
+  // PRICING SNAPSHOT
+  rentalDays   Int
+  rentalHours  Int
+  pricePerDay  Decimal  @db.Decimal(10, 2)
+  pricePerHour Decimal? @db.Decimal(10, 2)
+  rentalAmount Decimal  @db.Decimal(10, 2)
+
+  totalAmount     Decimal  @db.Decimal(10, 2)
+  securityDeposit Decimal? @db.Decimal(10, 2)
+
+  status BookingStatus @default(PENDING)
+
+   rejectionReason String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents BookingDocument[]
+
+  statusHistory BookingStatusHistory[]
+  payment       Payment?
+  invoice       Invoice?
+  review        Review?
+
+  @@index([userId])
+  @@index([carId])
+  @@index([status])
+  @@index([rentalType])
+  @@index([pickupAt, returnAt])
+}
+
+// =========================
+// BOOKING STATUS HISTORY
+// =========================
+
+model BookingStatusHistory {
+  id String @id @default(uuid())
+
+  status BookingStatus
+
+  note String?
+
+  createdAt DateTime @default(now())
+
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  changedById String?
+  changedBy   User?   @relation("StatusChangedBy", fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([bookingId, createdAt])
+}
+
+// =========================
+// PAYMENT
+// =========================
+
+model Payment {
+  id String @id @default(uuid())
+
+  amount Decimal @db.Decimal(10, 2)
+
+  status PaymentStatus @default(PENDING)
+  method PaymentMethod @default(RAZORPAY)
+
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String? @unique
+  razorpaySignature String?
+
+  paidAt DateTime?
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =========================
+// INVOICE
+// =========================
+
+model Invoice {
+  id String @id @default(uuid())
+
+  invoiceNumber String @unique
+
+  subtotal Decimal @db.Decimal(10, 2)
+  tax      Decimal @default(0) @db.Decimal(10, 2)
+  total    Decimal @db.Decimal(10, 2)
+
+  pdfUrl String?
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// =========================
+// NOTIFICATION
+// =========================
+
+model Notification {
+  id String @id @default(uuid())
+
+  type    NotificationType
+  title   String
+  message String
+
+  read Boolean @default(false)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+// =========================
+// REVIEW
+// =========================
+
+model Review {
+  id String @id @default(uuid())
+
+  rating  Int
+  comment String?
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id])
+
+  bookingId String  @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+}
+
+// =========================
+// MAINTENANCE
+// =========================
+
+model Maintenance {
+  id String @id @default(uuid())
+
+  title       String
+  description String?
+
+  status MaintenanceStatus @default(SCHEDULED)
+
+  scheduledAt DateTime
+  completedAt DateTime?
+
+  cost Decimal? @db.Decimal(10, 2)
+
+  carId String
+  car   Car    @relation(fields: [carId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([carId])
+}
+
+// =========================
+// ADMIN LOG
+// =========================
+
+model AdminLog {
+  id String @id @default(uuid())
+
+  action   String
+  entity   String
+  entityId String?
+  metadata Json?
+
+  adminId String
+  admin   User   @relation(fields: [adminId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([entity, entityId])
+}
+
+// =========================
+// PASSWORD RESET TOKEN
+// =========================
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BookingDocument {
+  id String @id @default(uuid())
+
+  type     DocumentType
+  url      String
+  publicId String?
+
+  verificationStatus DocumentVerificationStatus @default(PENDING)
+  rejectionReason    String?
+  verifiedAt         DateTime?
+
+  bookingId String
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([bookingId, type])
+  @@index([bookingId])
+  @@index([verificationStatus])
+}
