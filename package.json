@@ -15,6 +15,7 @@
   "description": "",
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@railway/cli": "^5.59.0",
     "axios": "^1.18.1",
     "bcrpyt": "^2.0.0",
     "bcrypt": "^6.0.0",
