@@ -6,6 +6,7 @@ import emailRoutes from "./routes/auth.routes.js"
 import bookingRoutes from "./routes/booking.routes.js";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import reviewRoutes from "./routes/reviews.routes.js";
 
 const app = express();
 app.use(cookieParser());
@@ -25,6 +26,7 @@ app.use("/api/cars", carRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/bookings", bookingRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 
 
