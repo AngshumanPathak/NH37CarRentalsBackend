@@ -8,9 +8,8 @@ export const fetchGoogleReviews = async () => {
     throw new Error("Missing Google Places API configuration in environment variables.");
   }
 
-  
-  // Google Places API (New) details endpoint
-  const url = `https://places.googleapis.com/v1/places/${placeId}?fields=reviews,rating,userRatingCount&key=${apiKey}`;
+  // Legacy Google Place Details endpoint
+  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,rating,reviews,user_ratings_total&key=${apiKey}`;
 
   const response = await fetch(url);
 
@@ -21,20 +20,27 @@ export const fetchGoogleReviews = async () => {
 
   const data = await response.json();
 
+  // Handle Google Legacy API status responses
+  if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    throw new Error(`Google Places API error: ${data.status} - ${data.error_message || "Unknown error"}`);
+  }
+
+  const reviews = data.result?.reviews;
+
   // If no reviews exist, return an empty array
-  if (!data.reviews || !Array.isArray(data.reviews)) {
+  if (!reviews || !Array.isArray(reviews)) {
     return [];
   }
 
-  // Map into a clean, normalized array matching your frontend expectations
-  return data.reviews.map((review: { name: any; authorAttribution: { displayName: any; photoUri: any; uri: any; }; rating: any; text: { text: any; }; originalText: { text: any; }; relativePublishTimeDescription: any; publishTime: any; }) => ({
-    id: review.name || null,
-    authorName: review.authorAttribution?.displayName || "Anonymous",
-    authorPhoto: review.authorAttribution?.photoUri || null,
-    authorUrl: review.authorAttribution?.uri || null,
+  // Map legacy Google response into the clean objects your frontend expects
+  return reviews.map((review: any) => ({
+    id: review.time ? String(review.time) : null,
+    authorName: review.author_name || "Anonymous",
+    authorPhoto: review.profile_photo_url || null,
+    authorUrl: review.author_url || null,
     rating: review.rating || 0,
-    text: review.text?.text || review.originalText?.text || "",
-    relativeTimeDescription: review.relativePublishTimeDescription || "",
-    publishTime: review.publishTime || null,
+    text: review.text || "",
+    relativeTimeDescription: review.relative_time_description || "",
+    publishTime: review.time ? new Date(review.time * 1000).toISOString() : null,
   }));
 };
