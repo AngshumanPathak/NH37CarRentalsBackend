@@ -5,6 +5,6 @@ import { getReviews } from "../controllers/review.controller.js";
 const router = express.Router();
 
 // Defines the GET /reviews endpoint
-router.get("/reviews", getReviews);
+router.get("/", getReviews);
 
 export default router;
