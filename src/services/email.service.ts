@@ -1,16 +1,47 @@
-import nodemailer from "nodemailer";
+import { google } from "googleapis";
 
-// Configure Nodemailer with Gmail OAuth2
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    type: "OAuth2",
-    user: process.env.GMAIL_USER, // Your sending Gmail address
-    clientId: process.env.GMAIL_CLIENT_ID,
-    clientSecret: process.env.GMAIL_CLIENT_SECRET,
-    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
-  },
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET,
+  "https://developers.google.com/oauthplayground"
+);
+
+// Set your permanent refresh token
+oauth2Client.setCredentials({
+  refresh_token: process.env.GMAIL_REFRESH_TOKEN,
 });
+
+const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+// Helper function to encode raw RFC 2822 email to URL-safe base64
+function makeEmail({
+  to,
+  from,
+  subject,
+  html,
+}: {
+  to: string;
+  from: string;
+  subject: string;
+  html: string;
+}): string {
+  const str = [
+    `To: ${to}`,
+    `From: ${from}`,
+    `Subject: =?utf-8?B?${Buffer.from(subject).toString("base64")}?=`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "Content-Transfer-Encoding: 7bit",
+    "",
+    html,
+  ].join("\r\n");
+
+  return Buffer.from(str)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
 
 export const sendEmail = async ({
   to,
@@ -22,18 +53,26 @@ export const sendEmail = async ({
   html: string;
 }) => {
   try {
-    const info = await transporter.sendMail({
-      from: `"NH37 Car Rentals" <${process.env.GMAIL_USER}>`,
+    const raw = makeEmail({
       to,
+      from: `"NH37 Car Rentals" <${process.env.GMAIL_USER}>`,
       subject,
       html,
     });
 
-    console.log("Email sent successfully. Message ID:", info.messageId);
-    return info;
+    // Sends over standard HTTPS (Port 443)
+    const response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw,
+      },
+    });
+
+    console.log("Email sent successfully via Gmail API. Message ID:", response.data.id);
+    return response.data;
   } catch (error: any) {
-    console.error("Failed to send email:", error);
-    throw new Error(error.message || "Failed to send email");
+    console.error("Failed to send email via Gmail API:", error?.response?.data || error);
+    throw new Error(error?.message || "Failed to send email");
   }
 };
 
@@ -51,20 +90,10 @@ export const sendVerificationEmail = async (
       <html>
         <body>
           <h2>Welcome to NH37 Car Rentals</h2>
-          <p>
-            Thanks for creating an account.
-            Please verify your email address by clicking the button below.
-          </p>
+          <p>Thanks for creating an account. Please verify your email address by clicking the button below.</p>
           <a
             href="${verificationUrl}"
-            style="
-              display:inline-block;
-              padding:12px 20px;
-              background:#000;
-              color:#fff;
-              text-decoration:none;
-              border-radius:6px;
-            "
+            style="display:inline-block;padding:12px 20px;background:#000;color:#fff;text-decoration:none;border-radius:6px;"
           >
             Verify Email
           </a>
@@ -94,14 +123,7 @@ export const sendPasswordResetEmail = async (
           <p>We received a request to reset your NH37 Car Rentals password.</p>
           <a
             href="${resetUrl}"
-            style="
-              display:inline-block;
-              padding:12px 20px;
-              background:#000;
-              color:#fff;
-              text-decoration:none;
-              border-radius:6px;
-            "
+            style="display:inline-block;padding:12px 20px;background:#000;color:#fff;text-decoration:none;border-radius:6px;"
           >
             Reset Password
           </a>
@@ -113,12 +135,3 @@ export const sendPasswordResetEmail = async (
     `,
   });
 };
-
-// Optional: verify token connection on startup
-transporter.verify((error) => {
-  if (error) {
-    console.error("Gmail OAuth2 verification failed:", error);
-  } else {
-    console.log("Gmail OAuth2 transporter is ready to send emails");
-  }
-});
