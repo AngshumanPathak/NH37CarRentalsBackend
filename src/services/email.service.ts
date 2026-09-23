@@ -1,12 +1,14 @@
 import nodemailer from "nodemailer";
 
+// Configure Nodemailer with Gmail OAuth2
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: process.env.SMTP_SECURE === "true",
+  service: "gmail",
   auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASSWORD,
+    type: "OAuth2",
+    user: process.env.GMAIL_USER, // Your sending Gmail address
+    clientId: process.env.GMAIL_CLIENT_ID,
+    clientSecret: process.env.GMAIL_CLIENT_SECRET,
+    refreshToken: process.env.GMAIL_REFRESH_TOKEN,
   },
 });
 
@@ -21,29 +23,25 @@ export const sendEmail = async ({
 }) => {
   try {
     const info = await transporter.sendMail({
-      from: process.env.SMTP_FROM,
+      from: `"NH37 Car Rentals" <${process.env.GMAIL_USER}>`,
       to,
       subject,
       html,
     });
 
-    console.log("Email sent:", info.messageId);
-
+    console.log("Email sent successfully. Message ID:", info.messageId);
     return info;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to send email:", error);
-    throw new Error("Failed to send email");
+    throw new Error(error.message || "Failed to send email");
   }
 };
-
-
 
 export const sendVerificationEmail = async (
   email: string,
   token: string
 ) => {
-  const verificationUrl =
-    `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
+  const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${token}`;
 
   return sendEmail({
     to: email,
@@ -53,12 +51,10 @@ export const sendVerificationEmail = async (
       <html>
         <body>
           <h2>Welcome to NH37 Car Rentals</h2>
-
           <p>
             Thanks for creating an account.
             Please verify your email address by clicking the button below.
           </p>
-
           <a
             href="${verificationUrl}"
             style="
@@ -72,31 +68,20 @@ export const sendVerificationEmail = async (
           >
             Verify Email
           </a>
-
-          <p>
-            This verification link will expire soon.
-          </p>
-
-          <p>
-            If you did not create this account, you can safely ignore this email.
-          </p>
-
-          <p>
-            — NH37 Car Rentals
-          </p>
+          <p>This verification link will expire soon.</p>
+          <p>If you did not create this account, you can safely ignore this email.</p>
+          <p>— NH37 Car Rentals</p>
         </body>
       </html>
     `,
   });
 };
 
-
 export const sendPasswordResetEmail = async (
   email: string,
   token: string
 ) => {
-  const resetUrl =
-    `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
 
   return sendEmail({
     to: email,
@@ -106,11 +91,7 @@ export const sendPasswordResetEmail = async (
       <html>
         <body>
           <h2>Password Reset</h2>
-
-          <p>
-            We received a request to reset your NH37 Car Rentals password.
-          </p>
-
+          <p>We received a request to reset your NH37 Car Rentals password.</p>
           <a
             href="${resetUrl}"
             style="
@@ -124,28 +105,20 @@ export const sendPasswordResetEmail = async (
           >
             Reset Password
           </a>
-
-          <p>
-            This link will expire shortly.
-          </p>
-
-          <p>
-            If you didn't request a password reset, you can ignore this email.
-          </p>
-
-          <p>
-            — NH37 Car Rentals
-          </p>
+          <p>This link will expire shortly.</p>
+          <p>If you didn't request a password reset, you can ignore this email.</p>
+          <p>— NH37 Car Rentals</p>
         </body>
       </html>
     `,
   });
 };
 
-transporter.verify((error, success) => {
+// Optional: verify token connection on startup
+transporter.verify((error) => {
   if (error) {
-    console.error("SMTP connection failed:", error);
+    console.error("Gmail OAuth2 verification failed:", error);
   } else {
-    console.log("SMTP server is ready");
+    console.log("Gmail OAuth2 transporter is ready to send emails");
   }
 });
